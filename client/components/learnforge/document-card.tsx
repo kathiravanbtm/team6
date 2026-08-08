@@ -36,6 +36,7 @@ export interface DocumentItem {
 interface DocumentCardProps {
   document: DocumentItem;
   onGenerateQuiz?: (id: string) => void;
+  onGenerateFlashcards?: (id: string) => void;
   onOpenDetails?: (id: string) => void;
   onDelete?: (id: string) => void;
   onStudyFlashcards?: (id: string) => void;
@@ -44,6 +45,7 @@ interface DocumentCardProps {
 export function DocumentCard({
   document: doc,
   onGenerateQuiz,
+  onGenerateFlashcards,
   onOpenDetails,
   onDelete,
   onStudyFlashcards,
@@ -66,20 +68,38 @@ export function DocumentCard({
       icon: <Eye className="h-4 w-4" />,
       onClick: () => onOpenDetails?.(doc.id),
     },
-    ...(isReady && onGenerateQuiz
+    ...(isReady
       ? [
-          {
-            id: "generate",
-            label: "Generate Quiz",
-            icon: <BrainCircuit className="h-4 w-4 text-primary" />,
-            onClick: () => onGenerateQuiz?.(doc.id),
-          },
-          {
-            id: "flashcards",
-            label: "Study Flashcards",
-            icon: <Layers className="h-4 w-4 text-indigo-500" />,
-            onClick: () => onStudyFlashcards?.(doc.id),
-          },
+          ...(onGenerateQuiz
+            ? [
+                {
+                  id: "generate",
+                  label: "Generate Quiz",
+                  icon: <BrainCircuit className="h-4 w-4 text-primary" />,
+                  onClick: () => onGenerateQuiz(doc.id),
+                },
+              ]
+            : []),
+          ...(onGenerateFlashcards
+            ? [
+                {
+                  id: "generate-fc",
+                  label: "Generate Flashcards",
+                  icon: <Layers className="h-4 w-4 text-indigo-500" />,
+                  onClick: () => onGenerateFlashcards(doc.id),
+                },
+              ]
+            : []),
+          ...(onStudyFlashcards
+            ? [
+                {
+                  id: "flashcards",
+                  label: "Study Flashcards",
+                  icon: <Layers className="h-4 w-4 text-indigo-500" />,
+                  onClick: () => onStudyFlashcards(doc.id),
+                },
+              ]
+            : []),
         ]
       : []),
     {
@@ -187,14 +207,27 @@ export function DocumentCard({
           {isReady ? `Last studied ${doc.lastStudied ?? "just now"}` : `Uploaded ${doc.uploadedAt}`}
         </span>
 
-        {isReady && onGenerateQuiz && (
-          <button
-            onClick={() => onGenerateQuiz(doc.id)}
-            className="text-xs font-bold text-primary hover:text-primary-dark transition-colors cursor-pointer focus:outline-none flex items-center gap-1"
-          >
-            <BrainCircuit className="h-4 w-4 shrink-0" />
-            Generate Quiz
-          </button>
+        {isReady && (onGenerateQuiz || onGenerateFlashcards) && (
+          <div className="flex items-center gap-3 select-none">
+            {onGenerateQuiz && (
+              <button
+                onClick={() => onGenerateQuiz(doc.id)}
+                className="text-xs font-bold text-primary hover:text-primary-dark transition-colors cursor-pointer focus:outline-none flex items-center gap-1"
+              >
+                <BrainCircuit className="h-4 w-4 shrink-0" />
+                + Quiz
+              </button>
+            )}
+            {onGenerateFlashcards && (
+              <button
+                onClick={() => onGenerateFlashcards(doc.id)}
+                className="text-xs font-bold text-indigo-500 hover:text-indigo-600 transition-colors cursor-pointer focus:outline-none flex items-center gap-1"
+              >
+                <Layers className="h-4 w-4 shrink-0" />
+                + Cards
+              </button>
+            )}
+          </div>
         )}
       </div>
     </Card>

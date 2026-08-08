@@ -28,6 +28,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ChevronLeft,
+  Loader2,
 } from "lucide-react";
 import { Dropdown } from "@/components/ui/dropdown";
 
@@ -67,8 +68,81 @@ export default function DocumentDetailWorkspace() {
   const router = useRouter();
   const documentId = params?.documentId as string;
 
-  const [activeTab, setActiveTab] = React.useState("overview");
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const initialTab = searchParams?.get("tab") || "overview";
+  const [activeTab, setActiveTab] = React.useState(initialTab);
   const [currentFcIndex, setCurrentFcIndex] = React.useState(0);
+  const [flashcards, setFlashcards] = React.useState<FlashcardItem[]>(mockFlashcards);
+
+  // Fetch real flashcards from DB on mount
+  React.useEffect(() => {
+    const fetchCards = async () => {
+      try {
+        const res = await fetch(`http://localhost:5000/api/flashcards/${documentId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.flashcards && data.flashcards.length > 0) {
+            setFlashcards(data.flashcards);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load flashcards:", err);
+      }
+    };
+    if (documentId) {
+      fetchCards();
+    }
+  }, [documentId]);
+
+  const [isGeneratingCards, setIsGeneratingCards] = React.useState(false);
+
+  const handleGenerateFlashcards = async () => {
+    if (isGeneratingCards) return;
+    setIsGeneratingCards(true);
+    toast("Generating AI flashcards...", {
+      type: "info",
+      description: "Extracting concepts via OpenRouter LLM.",
+    });
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/flashcards/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          document_id: documentId,
+          count: 8,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to generate flashcards.");
+      }
+
+      const data = await res.json();
+      
+      // Update local state cards list
+      if (data.flashcards && data.flashcards.length > 0) {
+        setFlashcards(data.flashcards);
+      }
+
+      toast("Flashcards generated successfully!", {
+        type: "success",
+        description: `Created ${data.flashcards?.length || 8} new spaced repetition cards.`,
+      });
+      setActiveTab("flashcards");
+    } catch (err: any) {
+      console.error("Flashcards generation error:", err.message);
+      toast("Failed to generate flashcards", {
+        type: "error",
+        description: err.message,
+      });
+    } finally {
+      setIsGeneratingCards(false);
+    }
+  };
 
   // Tab Menu Configuration
   const tabs: TabOption[] = [
@@ -95,8 +169,7 @@ export default function DocumentDetailWorkspace() {
       label: "Generate Flashcards",
       icon: <Layers className="h-4 w-4" />,
       onClick: () => {
-        toast("Creating definitions ledger...", { type: "info" });
-        setActiveTab("flashcards");
+        handleGenerateFlashcards();
       },
     },
   ];
@@ -108,7 +181,7 @@ export default function DocumentDetailWorkspace() {
       toast("Rescheduled for review", { type: "info" });
     }
     setTimeout(() => {
-      setCurrentFcIndex((prev) => (prev + 1) % mockFlashcards.length);
+      setCurrentFcIndex((prev) => (prev + 1) % flashcards.length);
     }, 1000);
   };
 
@@ -181,11 +254,16 @@ export default function DocumentDetailWorkspace() {
               </Button>
               <Button
                 variant="primary"
-                onClick={() => setActiveTab("flashcards")}
+                onClick={handleGenerateFlashcards}
+                disabled={isGeneratingCards}
                 className="h-9.5 text-xs font-semibold cursor-pointer"
               >
-                <Layers className="h-4 w-4 shrink-0" />
-                Generate Flashcards
+                {isGeneratingCards ? (
+                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                ) : (
+                  <Layers className="h-4 w-4 shrink-0" />
+                )}
+                {isGeneratingCards ? "Generating..." : "Generate Flashcards"}
               </Button>
               <Dropdown
                 trigger={
@@ -421,34 +499,67 @@ export default function DocumentDetailWorkspace() {
                 </p>
               </div>
 
-              <Flashcard
-                card={mockFlashcards[currentFcIndex]}
-                onScore={handleFlashcardScore}
-              />
+              {flashcards.length > 0 ? (
+                <>
+                  <Flashcard
+                    card={flashcards[currentFcIndex]}
+                    onScore={handleFlashcardScore}
+                  />
 
-              <div className="flex items-center justify-center gap-4 text-xs font-semibold text-text-secondary select-none">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setCurrentFcIndex((prev) => (prev - 1 + mockFlashcards.length) % mockFlashcards.length)
-                  }
-                  className="h-8 px-3 cursor-pointer"
-                >
-                  Previous
-                </Button>
-                <span>
-                  {currentFcIndex + 1} of {mockFlashcards.length}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentFcIndex((prev) => (prev + 1) % mockFlashcards.length)}
-                  className="h-8 px-3 cursor-pointer"
-                >
-                  Next
-                </Button>
-              </div>
+                  <div className="flex items-center justify-center gap-4 text-xs font-semibold text-text-secondary select-none">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setCurrentFcIndex((prev) => (prev - 1 + flashcards.length) % flashcards.length)
+                      }
+                      className="h-8 px-3 cursor-pointer"
+                    >
+                      Previous
+                    </Button>
+                    <span>
+                      {currentFcIndex + 1} of {flashcards.length}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentFcIndex((prev) => (prev + 1) % flashcards.length)}
+                      className="h-8 px-3 cursor-pointer"
+                    >
+                      Next
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-3 pt-4 border-t border-border-color/30 max-w-sm mx-auto">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const { exportFlashcardsToPdf } = await import("@/lib/utils/pdf-generator");
+                        exportFlashcardsToPdf(documentId || "Study Deck", flashcards, false);
+                      }}
+                      className="h-8 text-[10px] font-bold border-dashed border-border-color hover:bg-background cursor-pointer"
+                    >
+                      📄 Export Cards (No Answers)
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const { exportFlashcardsToPdf } = await import("@/lib/utils/pdf-generator");
+                        exportFlashcardsToPdf(documentId || "Study Deck", flashcards, true);
+                      }}
+                      className="h-8 text-[10px] font-bold border-dashed border-border-color hover:bg-background cursor-pointer"
+                    >
+                      📄 Export Cards (With Answers)
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8 text-xs text-text-secondary">
+                  No flashcards generated for this document yet. Click &quot;Generate Flashcards&quot; at the top.
+                </div>
+              )}
             </div>
           )}
 

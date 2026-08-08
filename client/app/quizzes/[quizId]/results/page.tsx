@@ -274,6 +274,47 @@ export default function QuizResultsPage() {
                       Retry Quiz
                     </Button>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border-color/30 mt-3">
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        const { exportQuizToPdf } = await import("@/lib/utils/pdf-generator");
+                        exportQuizToPdf(
+                          config?.title || "LearnForge Quiz",
+                          activeQuestions.map((q: any) => ({
+                            question: q.questionText || q.question_text || q.question,
+                            options: q.options,
+                            correctIndex: q.correctIndex,
+                            explanation: q.explanation
+                          })),
+                          false
+                        );
+                      }}
+                      className="h-9 text-[10px] font-bold border-dashed border-border-color/90 hover:bg-background cursor-pointer"
+                    >
+                      📄 Export Quiz (No Answers)
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        const { exportQuizToPdf } = await import("@/lib/utils/pdf-generator");
+                        exportQuizToPdf(
+                          config?.title || "LearnForge Quiz",
+                          activeQuestions.map((q: any) => ({
+                            question: q.questionText || q.question_text || q.question,
+                            options: q.options,
+                            correctIndex: q.correctIndex,
+                            explanation: q.explanation
+                          })),
+                          true
+                        );
+                      }}
+                      className="h-9 text-[10px] font-bold border-dashed border-border-color/90 hover:bg-background cursor-pointer"
+                    >
+                      📄 Export Quiz (With Answers)
+                    </Button>
+                  </div>
                 </div>
               </Card>
 

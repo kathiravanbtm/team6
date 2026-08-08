@@ -7,6 +7,7 @@ const API_BASE = "http://localhost:5000/api";
 import { Sidebar } from "@/components/learnforge/sidebar";
 import { Topbar } from "@/components/learnforge/topbar";
 import { DocumentCard, DocumentItem } from "@/components/learnforge/document-card";
+import { Flashcard, FlashcardItem } from "@/components/learnforge/flashcard";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SearchInput } from "@/components/ui/search-input";
@@ -27,6 +28,14 @@ export default function DocumentsPage() {
   const [isUploadOpen, setIsUploadOpen] = React.useState(false);
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [hasError, setHasError] = React.useState(false);
+  const [generatingFlashcardsDocId, setGeneratingFlashcardsDocId] = React.useState<string | null>(null);
+
+  // Flashcards Modal triggers
+  const [activeDeck, setActiveDeck] = React.useState<{
+    title: string;
+    flashcards: FlashcardItem[];
+  } | null>(null);
+  const [currentFcIndex, setCurrentFcIndex] = React.useState(0);
 
   // Fetch Documents List from server RAG DB
   const fetchDocuments = React.useCallback(async () => {
@@ -137,6 +146,98 @@ export default function DocumentsPage() {
       });
     } catch (err: any) {
       toast("Error deleting document", {
+        type: "error",
+        description: err.message,
+      });
+    }
+  };
+
+  const handleGenerateFlashcards = async (id: string) => {
+    const doc = documents.find((d) => d.id === id);
+    if (!doc) return;
+
+    setGeneratingFlashcardsDocId(id);
+    toast(`Generating AI flashcards for "${doc.name}"...`, {
+      type: "info",
+      description: "Extracting concepts via OpenRouter LLM.",
+    });
+
+    try {
+      const res = await fetch(`${API_BASE}/flashcards/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          document_id: id,
+          count: 8,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to generate flashcards.");
+      }
+
+      const data = await res.json();
+      
+      // Update local state card counts
+      setDocuments((prev: DocumentItem[]) =>
+        prev.map((d: DocumentItem) =>
+          d.id === id
+            ? { ...d, flashcardsCount: (d.flashcardsCount || 0) + (data.flashcards?.length || 8) }
+            : d
+        )
+      );
+
+      toast("Flashcards generated successfully!", {
+        type: "success",
+        description: `Created ${data.flashcards?.length || 8} new spaced repetition cards.`,
+      });
+
+      // Display the generated flashcards directly in-place!
+      if (data.flashcards && data.flashcards.length > 0) {
+        setActiveDeck({
+          title: doc.name,
+          flashcards: data.flashcards,
+        });
+        setCurrentFcIndex(0);
+      }
+    } catch (err: any) {
+      console.error("Flashcards generation error:", err.message);
+      toast("Failed to generate flashcards", {
+        type: "error",
+        description: err.message,
+      });
+    } finally {
+      setGeneratingFlashcardsDocId(null);
+    }
+  };
+
+  const handleStudyFlashcards = async (id: string) => {
+    const doc = documents.find((d) => d.id === id);
+    if (!doc) return;
+
+    toast("Loading your flashcards...", { type: "info" });
+    try {
+      const res = await fetch(`${API_BASE}/flashcards/${id}`);
+      if (!res.ok) throw new Error("Failed to retrieve flashcards");
+      const data = await res.json();
+      
+      if (data.flashcards && data.flashcards.length > 0) {
+        setActiveDeck({
+          title: doc.name,
+          flashcards: data.flashcards,
+        });
+        setCurrentFcIndex(0);
+      } else {
+        toast(`No flashcards found for "${doc.name}"`, {
+          type: "warning",
+          description: "Click + Cards to generate them via AI first.",
+        });
+      }
+    } catch (err: any) {
+      toast("Error loading flashcards", {
         type: "error",
         description: err.message,
       });
@@ -263,15 +364,28 @@ export default function DocumentsPage() {
                   {/* DOCUMENT GRID */}
                   {filteredDocuments.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                      {filteredDocuments.map((doc) => (
-                        <DocumentCard
-                          key={doc.id}
-                          document={doc}
-                          onDelete={handleDeleteDocument}
-                          onGenerateQuiz={handleGenerateQuiz}
-                          onOpenDetails={handleOpenDetails}
-                        />
-                      ))}
+                      {filteredDocuments.map((doc) => {
+                        const isSelfGenerating = generatingFlashcardsDocId === doc.id;
+                        const displayDoc: DocumentItem = isSelfGenerating
+                          ? {
+                              ...doc,
+                              status: "processing",
+                              processingProgress: 60,
+                              processingStep: "Creating flashcards...",
+                            }
+                          : doc;
+                        return (
+                          <DocumentCard
+                            key={doc.id}
+                            document={displayDoc}
+                            onDelete={handleDeleteDocument}
+                            onGenerateQuiz={handleGenerateQuiz}
+                            onGenerateFlashcards={handleGenerateFlashcards}
+                            onOpenDetails={handleOpenDetails}
+                            onStudyFlashcards={handleStudyFlashcards}
+                          />
+                        );
+                      })}
                     </div>
                   ) : (
                     /* EMPTY STATE (Illustration made entirely from UI/CSS) */
@@ -339,6 +453,81 @@ export default function DocumentsPage() {
         <div className="py-4">
           <UploadDropzone onUpload={handleUploadFile} />
         </div>
+      </Dialog>
+
+      {/* FLASHCARD VIEWER MODAL */}
+      <Dialog
+        isOpen={!!activeDeck}
+        onClose={() => setActiveDeck(null)}
+        title={`Study Deck: ${activeDeck?.title}`}
+        description="Review flashcards to lock in core concept understanding."
+      >
+        {activeDeck && activeDeck.flashcards.length > 0 && (
+          <div className="space-y-6 py-4">
+            <Flashcard
+              card={activeDeck.flashcards[currentFcIndex]}
+              onScore={(cardId, gotIt) => {
+                if (gotIt) {
+                  toast("Marked as understood", { type: "success" });
+                } else {
+                  toast("Rescheduled for review", { type: "info" });
+                }
+                setTimeout(() => {
+                  setCurrentFcIndex((prev) => (prev + 1) % activeDeck.flashcards.length);
+                }, 1000);
+              }}
+            />
+
+            <div className="flex items-center justify-center gap-4 text-xs font-semibold text-text-secondary select-none">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCurrentFcIndex((prev) => (prev - 1 + activeDeck.flashcards.length) % activeDeck.flashcards.length)
+                }
+                className="h-8 px-3 cursor-pointer"
+              >
+                Previous
+              </Button>
+              <span>
+                {currentFcIndex + 1} of {activeDeck.flashcards.length}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentFcIndex((prev) => (prev + 1) % activeDeck.flashcards.length)}
+                className="h-8 px-3 cursor-pointer"
+              >
+                Next
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-4 border-t border-border-color/30 max-w-sm mx-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  const { exportFlashcardsToPdf } = await import("@/lib/utils/pdf-generator");
+                  exportFlashcardsToPdf(activeDeck.title, activeDeck.flashcards, false);
+                }}
+                className="h-8 text-[10px] font-bold border-dashed border-border-color hover:bg-background cursor-pointer"
+              >
+                📄 Export Cards (No Answers)
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  const { exportFlashcardsToPdf } = await import("@/lib/utils/pdf-generator");
+                  exportFlashcardsToPdf(activeDeck.title, activeDeck.flashcards, true);
+                }}
+                className="h-8 text-[10px] font-bold border-dashed border-border-color hover:bg-background cursor-pointer"
+              >
+                📄 Export Cards (With Answers)
+              </Button>
+            </div>
+          </div>
+        )}
       </Dialog>
     </div>
   );

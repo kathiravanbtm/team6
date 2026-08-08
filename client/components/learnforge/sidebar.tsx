@@ -9,13 +9,6 @@ import {
   Sparkles,
   LayoutDashboard,
   FileText,
-  HelpCircle,
-  Layers,
-  AlertTriangle,
-  BarChart2,
-  Calendar,
-  Settings,
-  User,
   Menu,
   X,
 } from "lucide-react";
@@ -31,16 +24,6 @@ export interface NavItem {
 const mainNavItems: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Study Materials", href: "/documents", icon: FileText },
-  { name: "Quizzes", href: "/quizzes", icon: HelpCircle },
-  { name: "Flashcards", href: "/flashcards", icon: Layers },
-  { name: "Mistakes", href: "/mistakes", icon: AlertTriangle },
-  { name: "Analytics", href: "/analytics", icon: BarChart2 },
-  { name: "Study Plan", href: "/study-plan", icon: Calendar },
-];
-
-const bottomNavItems: NavItem[] = [
-  { name: "Settings", href: "/settings", icon: Settings },
-  { name: "Profile", href: "/profile", icon: User },
 ];
 
 export function Sidebar() {
@@ -118,7 +101,7 @@ export function Sidebar() {
       {/* Sidebar Core Wrapper */}
       <aside
         className={cn(
-          "fixed top-0 bottom-0 left-0 z-30 w-[240px] bg-surface border-r border-border-color/80 flex flex-col justify-between py-6 px-4 transition-transform duration-300 md:translate-x-0",
+          "fixed top-0 bottom-0 left-0 z-30 w-[240px] bg-surface border-r border-border-color/80 flex flex-col py-6 px-4 transition-transform duration-300 md:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full md:left-0"
         )}
       >
@@ -135,18 +118,11 @@ export function Sidebar() {
           </Link>
 
           {/* Navigation Links */}
-          <nav className="flex flex-col gap-1.5 flex-1">
+          <nav className="flex flex-col gap-1.5">
             {mainNavItems.map((item) => (
               <NavLink key={item.name} item={item} />
             ))}
           </nav>
-        </div>
-
-        {/* Bottom Section (Settings, Profile) */}
-        <div className="flex flex-col gap-1.5 pt-4 border-t border-border-color/60">
-          {bottomNavItems.map((item) => (
-            <NavLink key={item.name} item={item} />
-          ))}
         </div>
       </aside>
 
