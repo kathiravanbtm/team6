@@ -55,7 +55,7 @@ async function uploadDocument(req, res, next) {
     const userId = req.user?.id;
 
     // Insert Document header
-    const { data: docData, error: docErr } = await supabaseAdmin
+    const { data: docDataList, error: docErr } = await supabaseAdmin
       .from('documents')
       .insert({
         user_id: userId,
@@ -63,11 +63,15 @@ async function uploadDocument(req, res, next) {
         source_type: parseResult.source_type,
         raw_text: rawText,
       })
-      .select('id, user_id, title, source_type, created_at')
-      .single();
+      .select('id, user_id, title, source_type, created_at');
 
     if (docErr) {
       throw new Error(`Failed to save document in database: ${docErr.message}`);
+    }
+
+    const docData = docDataList && docDataList.length > 0 ? docDataList[0] : null;
+    if (!docData) {
+      throw new Error(`Failed to retrieve inserted document header`);
     }
 
     const documentId = docData.id;

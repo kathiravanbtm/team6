@@ -37,7 +37,7 @@ class MockSupabaseQueryBuilder {
       this.db[this.table].push(newRec);
       inserted.push(newRec);
     }
-    this.data = Array.isArray(records) ? inserted : inserted[0];
+    this.data = inserted;
     return this;
   }
 

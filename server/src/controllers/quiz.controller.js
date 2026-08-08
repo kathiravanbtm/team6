@@ -42,18 +42,22 @@ async function generateQuizController(req, res, next) {
 
     const quizTitle = quizData.title || `Quiz: ${documentInfo?.title || 'Study Material'}`;
 
-    const { data: quizRecord, error: quizErr } = await supabaseAdmin
+    const { data: quizRecordList, error: quizErr } = await supabaseAdmin
       .from('quizzes')
       .insert({
         document_id,
         user_id: userId,
         title: quizTitle,
       })
-      .select('id, document_id, user_id, title, created_at')
-      .single();
+      .select('id, document_id, user_id, title, created_at');
 
     if (quizErr) {
       throw new Error(`Failed to create quiz record: ${quizErr.message}`);
+    }
+
+    const quizRecord = quizRecordList && quizRecordList.length > 0 ? quizRecordList[0] : null;
+    if (!quizRecord) {
+      throw new Error(`Failed to retrieve created quiz record`);
     }
 
     const questionRecords = quizData.questions.map(q => ({
