@@ -3,8 +3,20 @@
 import * as React from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FileText, MoreVertical, BrainCircuit, Eye, Trash2, Clock } from "lucide-react";
+import {
+  FileText,
+  MoreVertical,
+  BrainCircuit,
+  Eye,
+  Trash2,
+  Clock,
+  BookOpen,
+  HelpCircle,
+  Layers,
+  Loader2,
+} from "lucide-react";
 import { Dropdown } from "@/components/ui/dropdown";
+import { ProgressBar } from "@/components/ui/progress";
 
 export interface DocumentItem {
   id: string;
@@ -15,46 +27,49 @@ export interface DocumentItem {
   status: "ready" | "processing" | "failed";
   topicsCount?: number;
   quizzesCount?: number;
+  pageCount?: number;
+  flashcardsCount?: number;
+  lastStudied?: string;
+  processingProgress?: number; // 0 to 100
+  processingStep?: string; // e.g. "Extracting content..."
 }
 
 interface DocumentCardProps {
   document: DocumentItem;
   onGenerateQuiz?: (id: string) => void;
-  onViewDetails?: (id: string) => void;
+  onOpenDetails?: (id: string) => void;
   onDelete?: (id: string) => void;
 }
 
 export function DocumentCard({
   document: doc,
   onGenerateQuiz,
-  onViewDetails,
+  onOpenDetails,
   onDelete,
 }: DocumentCardProps) {
-  const fileIcon = {
-    pdf: "border-red-200 text-red-500 bg-red-50",
-    docx: "border-blue-200 text-blue-500 bg-blue-50",
-    txt: "border-gray-200 text-gray-500 bg-gray-50",
-    md: "border-teal-200 text-teal-600 bg-teal-50",
-  };
+  const isReady = doc.status === "ready";
+  const isProcessing = doc.status === "processing";
+  const isFailed = doc.status === "failed";
 
-  const statusConfig = {
-    ready: { variant: "success" as const, label: "Ready" },
-    processing: { variant: "warning" as const, label: "Processing..." },
-    failed: { variant: "error" as const, label: "Failed" },
+  const fileStyles = {
+    pdf: "border-red-200 text-red-500 bg-red-50/60",
+    docx: "border-blue-200 text-blue-500 bg-blue-50/60",
+    txt: "border-gray-300 text-gray-500 bg-gray-50/60",
+    md: "border-teal-200 text-teal-600 bg-teal-50/60",
   };
 
   const actions = [
     {
-      id: "view",
-      label: "View material",
+      id: "open",
+      label: "Open Material",
       icon: <Eye className="h-4 w-4" />,
-      onClick: () => onViewDetails?.(doc.id),
+      onClick: () => onOpenDetails?.(doc.id),
     },
-    ...(doc.status === "ready"
+    ...(isReady && onGenerateQuiz
       ? [
           {
             id: "generate",
-            label: "Generate AI Quiz",
+            label: "Generate Quiz",
             icon: <BrainCircuit className="h-4 w-4 text-primary" />,
             onClick: () => onGenerateQuiz?.(doc.id),
           },
@@ -62,7 +77,7 @@ export function DocumentCard({
       : []),
     {
       id: "delete",
-      label: "Delete file",
+      label: "Delete",
       icon: <Trash2 className="h-4 w-4" />,
       danger: true,
       onClick: () => onDelete?.(doc.id),
@@ -70,70 +85,108 @@ export function DocumentCard({
   ];
 
   return (
-    <Card hoverLift className="flex flex-col justify-between font-sans border-border-color/80 relative">
-      <div>
-        <div className="flex items-start justify-between">
+    <Card
+      hoverLift
+      className="flex flex-col justify-between font-sans border-border-color bg-surface p-5 rounded-xl shadow-xs min-h-[220px]"
+    >
+      {/* CARD HEADER */}
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
           <div
-            className={`h-11 w-11 rounded-lg border flex items-center justify-center font-bold text-xs uppercase ${
-              fileIcon[doc.type] || "border-border-color text-text-secondary bg-background"
+            className={`h-11 w-11 rounded-lg border flex items-center justify-center font-bold text-xs uppercase shrink-0 ${
+              fileStyles[doc.type] || "border-border-color bg-background"
             }`}
           >
             {doc.type}
           </div>
-          <div className="flex items-center gap-1.5">
-            <Badge variant={statusConfig[doc.status].variant}>
-              {statusConfig[doc.status].label}
-            </Badge>
-            <Dropdown
-              trigger={
-                <button className="p-1 hover:bg-background rounded-full border border-transparent hover:border-border-color transition-colors cursor-pointer text-text-secondary hover:text-text-primary">
-                  <MoreVertical className="h-4.5 w-4.5" />
-                </button>
-              }
-              items={actions}
-            />
+          <div className="space-y-0.5">
+            <h4 className="font-bold text-text-primary text-sm leading-snug line-clamp-1 max-w-[170px]" title={doc.name}>
+              {doc.name}
+            </h4>
+            <span className="text-[10px] text-text-secondary font-medium">
+              {doc.type.toUpperCase()} &bull; {doc.pageCount ?? 1} {doc.pageCount === 1 ? "page" : "pages"}
+            </span>
           </div>
         </div>
 
-        <div className="mt-4">
-          <h4 className="font-semibold text-text-primary text-base line-clamp-1 leading-snug">
-            {doc.name}
-          </h4>
-          <div className="flex items-center gap-2 mt-1.5 text-xs text-text-secondary">
-            <span>{doc.size}</span>
-            <span className="h-1 w-1 rounded-full bg-border-color" />
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {doc.uploadedAt}
-            </span>
-          </div>
+        <div className="flex items-center gap-1">
+          {isFailed && <Badge variant="error">Failed</Badge>}
+          <Dropdown
+            trigger={
+              <button className="p-1 hover:bg-background rounded-full border border-transparent hover:border-border-color transition-colors cursor-pointer text-text-secondary hover:text-text-primary focus:outline-none">
+                <MoreVertical className="h-4.5 w-4.5" />
+              </button>
+            }
+            items={actions}
+          />
         </div>
       </div>
 
-      <div className="mt-6 pt-3.5 border-t border-border-color/40 flex justify-between items-center text-xs">
-        <div className="flex items-center gap-4 text-text-secondary">
-          <div>
-            <span className="font-semibold text-text-primary block text-sm">
-              {doc.topicsCount ?? 0}
-            </span>
-            <span>Topics</span>
+      {/* CARD BODY */}
+      <div className="my-5 flex-1 flex flex-col justify-center">
+        {isReady && (
+          <div className="grid grid-cols-3 gap-2 text-center bg-background/50 border border-border-color/40 p-2.5 rounded-lg">
+            <div className="space-y-0.5">
+              <span className="text-xs font-extrabold text-text-primary block">
+                {doc.topicsCount ?? 0}
+              </span>
+              <span className="text-[9px] font-semibold text-text-secondary uppercase tracking-wider block">
+                Topics
+              </span>
+            </div>
+            <div className="space-y-0.5 border-x border-border-color/40">
+              <span className="text-xs font-extrabold text-text-primary block">
+                {doc.quizzesCount ?? 0}
+              </span>
+              <span className="text-[9px] font-semibold text-text-secondary uppercase tracking-wider block">
+                Quizzes
+              </span>
+            </div>
+            <div className="space-y-0.5">
+              <span className="text-xs font-extrabold text-text-primary block">
+                {doc.flashcardsCount ?? 0}
+              </span>
+              <span className="text-[9px] font-semibold text-text-secondary uppercase tracking-wider block">
+                Cards
+              </span>
+            </div>
           </div>
-          <div className="w-[1px] h-6 bg-border-color/60" />
-          <div>
-            <span className="font-semibold text-text-primary block text-sm">
-              {doc.quizzesCount ?? 0}
-            </span>
-            <span>Quizzes</span>
-          </div>
-        </div>
+        )}
 
-        {doc.status === "ready" && onGenerateQuiz && (
+        {isProcessing && (
+          <div className="space-y-2.5">
+            <div className="flex justify-between items-center text-[10px] font-bold text-text-secondary select-none">
+              <span className="flex items-center gap-1.5 text-primary">
+                <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                {doc.processingStep || "Analyzing document..."}
+              </span>
+              <span>{doc.processingProgress ?? 10}%</span>
+            </div>
+            <ProgressBar value={doc.processingProgress ?? 10} />
+          </div>
+        )}
+
+        {isFailed && (
+          <p className="text-xs text-error font-medium leading-relaxed bg-error/5 border border-error/10 p-2.5 rounded-lg select-none">
+            Error occurred while extracting topics from this file format. Please try again.
+          </p>
+        )}
+      </div>
+
+      {/* CARD FOOTER */}
+      <div className="border-t border-border-color/50 pt-3.5 flex justify-between items-center text-[10px] font-semibold text-text-secondary">
+        <span className="flex items-center gap-1">
+          <Clock className="h-3.5 w-3.5" />
+          {isReady ? `Last studied ${doc.lastStudied ?? "just now"}` : `Uploaded ${doc.uploadedAt}`}
+        </span>
+
+        {isReady && onGenerateQuiz && (
           <button
             onClick={() => onGenerateQuiz(doc.id)}
-            className="flex items-center gap-1 font-semibold text-primary hover:text-primary-dark transition-colors cursor-pointer"
+            className="text-xs font-bold text-primary hover:text-primary-dark transition-colors cursor-pointer focus:outline-none flex items-center gap-1"
           >
-            <BrainCircuit className="h-4 w-4" />
-            Generate
+            <BrainCircuit className="h-4 w-4 shrink-0" />
+            Generate Quiz
           </button>
         )}
       </div>

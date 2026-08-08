@@ -9,10 +9,11 @@ import { cn } from "@/lib/utils";
 
 interface TopbarProps {
   title?: string;
+  subtitle?: string;
   className?: string;
 }
 
-export function Topbar({ title = "Dashboard", className }: TopbarProps) {
+export function Topbar({ title = "Dashboard", subtitle, className }: TopbarProps) {
   const [searchValue, setSearchValue] = React.useState("");
 
   const userMenuItems: DropdownItem[] = [
@@ -47,11 +48,16 @@ export function Topbar({ title = "Dashboard", className }: TopbarProps) {
       )}
     >
       {/* View Title */}
-      <div className="flex items-center">
+      <div className="flex flex-col justify-center">
         {/* Generous margin on mobile to prevent overlaying the toggle menu */}
-        <h1 className="text-base md:text-lg font-bold text-text-primary pl-8 md:pl-0 select-none">
+        <h1 className="text-base md:text-lg font-bold text-text-primary pl-8 md:pl-0 select-none leading-tight">
           {title}
         </h1>
+        {subtitle && (
+          <p className="text-[11px] md:text-xs text-text-secondary pl-8 md:pl-0 select-none mt-0.5 leading-tight font-medium hidden sm:block">
+            {subtitle}
+          </p>
+        )}
       </div>
 
       {/* Global Actions */}

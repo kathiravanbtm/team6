@@ -30,7 +30,7 @@ export interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Study Materials", href: "/study-materials", icon: FileText },
+  { name: "Study Materials", href: "/documents", icon: FileText },
   { name: "Quizzes", href: "/quizzes", icon: HelpCircle },
   { name: "Flashcards", href: "/flashcards", icon: Layers },
   { name: "Mistakes", href: "/mistakes", icon: AlertTriangle },

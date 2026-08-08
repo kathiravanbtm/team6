@@ -168,7 +168,7 @@ interface DashboardShellProps {
   title?: string;
 }
 
-export function DashboardShell({ initialTab = "materials", title = "AI Learning Lab" }: DashboardShellProps) {
+export function DashboardShell({ initialTab = "quizzes", title = "AI Learning Lab" }: DashboardShellProps) {
   const [activeTab, setActiveTab] = React.useState(initialTab);
 
   // Sync tab with props changes
@@ -195,10 +195,7 @@ export function DashboardShell({ initialTab = "materials", title = "AI Learning 
   const [correctAnswersCount, setCorrectAnswersCount] = React.useState(0);
 
   const tabs: TabOption[] = [
-    { id: "materials", label: "Study Materials", icon: <FileText className="h-4 w-4" /> },
     { id: "quizzes", label: "AI Quizzes", icon: <HelpCircle className="h-4 w-4" /> },
-    { id: "flashcards", label: "Flashcards", icon: <Layers className="h-4 w-4" /> },
-    { id: "analytics", label: "Analytics", icon: <BarChart2 className="h-4 w-4" /> },
   ];
 
   // Document Upload Mock Flow

@@ -1,7 +1,7 @@
 "use client";
 
-import { DashboardShell } from "@/components/learnforge/dashboard-shell";
+import DocumentsPage from "@/app/documents/page";
 
 export default function StudyMaterialsPage() {
-  return <DashboardShell initialTab="materials" title="Study Materials" />;
+  return <DocumentsPage />;
 }
