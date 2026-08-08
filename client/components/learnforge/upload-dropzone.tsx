@@ -59,7 +59,7 @@ export function UploadDropzone({
   return (
     <div className={cn("w-full max-w-xl mx-auto font-sans", className)}>
       <motion.div
-        {...getRootProps()}
+        {...(getRootProps() as any)}
         whileHover={{ scale: 1.002, borderColor: "var(--color-primary)" }}
         className={cn(
           "border border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors duration-200 bg-surface/50 border-border-color",

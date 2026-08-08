@@ -52,7 +52,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || isLoading}
         whileTap={{ scale: disabled || isLoading ? 1 : 0.98 }}
         className={cn(baseStyles, variants[variant], sizes[size], className)}
-        {...props}
+        {...(props as any)}
       >
         {isLoading && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
         {children}
