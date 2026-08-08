@@ -157,9 +157,40 @@ export default function QuizExperiencePage() {
     }
   };
 
-  const handleFinishSubmit = () => {
+  const handleFinishSubmit = async () => {
     setShowSubmitConfirm(false);
     submitQuiz();
+
+    const isMockQuiz = quizId.startsWith("quiz-mock-") || quizId.startsWith("quiz-fallback-");
+    if (!isMockQuiz) {
+      try {
+        const payloadAnswers = questions.map((q: any) => {
+          const ansVal = userAnswers[q.id];
+          let selectedStr = "";
+          if (typeof ansVal === "number") {
+            selectedStr = q.options[ansVal] || "";
+          } else if (typeof ansVal === "string") {
+            selectedStr = ansVal;
+          }
+          return {
+            question_id: q.id,
+            selected: selectedStr,
+          };
+        });
+
+        const API_BASE = "http://localhost:5000/api";
+        await fetch(`${API_BASE}/quiz/${quizId}/submit`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ answers: payloadAnswers }),
+        });
+      } catch (err: any) {
+        console.error("Failed to post attempt to server:", err.message);
+      }
+    }
+
     toast("Quiz submitted!", { type: "success" });
     router.push(`/quizzes/${quizId}/results`);
   };

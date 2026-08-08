@@ -1,6 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
+
+const API_BASE = "http://localhost:5000/api";
 import { Sidebar } from "@/components/learnforge/sidebar";
 import { Topbar } from "@/components/learnforge/topbar";
 import { DocumentCard, DocumentItem } from "@/components/learnforge/document-card";
@@ -14,64 +17,9 @@ import { EmptyState, ErrorState } from "@/components/ui/state-indicators";
 import { toast, ToastContainer } from "@/components/ui/toast";
 import { Plus, Filter, FileCode2, Search, FileText } from "lucide-react";
 
-// Initial mock documents
-const initialDocuments: DocumentItem[] = [
-  {
-    id: "doc-1",
-    name: "Operating Systems.pdf",
-    type: "pdf",
-    size: "8.4 MB",
-    uploadedAt: "3 days ago",
-    status: "ready",
-    topicsCount: 15,
-    quizzesCount: 12,
-    flashcardsCount: 86,
-    pageCount: 124,
-    lastStudied: "2 hours ago",
-  },
-  {
-    id: "doc-2",
-    name: "Lecture 3 - Mitochondrial Genetics.pdf",
-    type: "pdf",
-    size: "2.4 MB",
-    uploadedAt: "2 hours ago",
-    status: "ready",
-    topicsCount: 4,
-    quizzesCount: 1,
-    flashcardsCount: 24,
-    pageCount: 24,
-    lastStudied: "4 hours ago",
-  },
-  {
-    id: "doc-3",
-    name: "Krebs Cycle pathways.docx",
-    type: "docx",
-    size: "1.1 MB",
-    uploadedAt: "Yesterday",
-    status: "ready",
-    topicsCount: 3,
-    quizzesCount: 1,
-    flashcardsCount: 18,
-    pageCount: 12,
-    lastStudied: "Yesterday",
-  },
-  {
-    id: "doc-4",
-    name: "Action Potential summary notes.md",
-    type: "md",
-    size: "18 KB",
-    uploadedAt: "5 days ago",
-    status: "ready",
-    topicsCount: 5,
-    quizzesCount: 1,
-    flashcardsCount: 10,
-    pageCount: 2,
-    lastStudied: "3 days ago",
-  },
-];
-
 export default function DocumentsPage() {
-  const [documents, setDocuments] = React.useState<DocumentItem[]>(initialDocuments);
+  const router = useRouter();
+  const [documents, setDocuments] = React.useState<DocumentItem[]>([]);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedFilter, setSelectedFilter] = React.useState<"All" | "PDF" | "DOCX" | "TXT" | "Markdown">("All");
   
@@ -80,113 +28,131 @@ export default function DocumentsPage() {
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [hasError, setHasError] = React.useState(false);
 
-  // Simulate initial server fetch skeleton duration
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
+  // Fetch Documents List from server RAG DB
+  const fetchDocuments = React.useCallback(async () => {
+    try {
+      setIsInitialLoading(true);
+      const res = await fetch(`${API_BASE}/documents`);
+      if (!res.ok) throw new Error("Failed to fetch documents");
+      const data = await res.json();
+      setDocuments(data);
+    } catch (err: any) {
+      console.error("Error fetching documents:", err.message);
+      setHasError(true);
+    } finally {
       setIsInitialLoading(false);
-    }, 1000);
-    return () => clearTimeout(timer);
+    }
   }, []);
 
-  const handleUploadFile = (files: File[]) => {
+  React.useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
+
+  const handleUploadFile = async (files: File[]) => {
     if (files.length === 0) return;
     const file = files[0];
 
     // Close Dialog Modal
     setIsUploadOpen(false);
 
-    // Create a new document in processing state
-    const newDocId = `doc-${Date.now()}`;
+    // Create a new document in processing state locally
+    const tempDocId = `temp-${Date.now()}`;
     const newDoc: DocumentItem = {
-      id: newDocId,
+      id: tempDocId,
       name: file.name,
       type: (file.name.split(".").pop()?.toLowerCase() as any) || "pdf",
       size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
       uploadedAt: "Just now",
       status: "processing",
-      processingProgress: 10,
-      processingStep: "Extracting content...",
+      processingProgress: 20,
+      processingStep: "Uploading content...",
     };
 
     setDocuments((prev) => [newDoc, ...prev]);
-    toast(`Started processing "${file.name}"`, {
-      type: "info",
-      description: "Extracting contents and generating quizzes.",
-    });
 
-    // Simulate AI extraction timeline
-    setTimeout(() => {
-      // Step 2
-      setDocuments((prev) =>
-        prev.map((d) =>
-          d.id === newDocId
-            ? { ...d, processingProgress: 45, processingStep: "Analyzing key concepts..." }
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${API_BASE}/documents/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to upload document");
+      }
+
+      const uploadData = await res.json();
+      
+      // Update local state item to ready with actual DB id
+      setDocuments((prev: DocumentItem[]) =>
+        prev.map((d: DocumentItem) =>
+          d.id === tempDocId
+            ? {
+                ...d,
+                id: uploadData.document_id,
+                status: "ready",
+                topicsCount: uploadData.chunk_count ? Math.max(1, Math.ceil(uploadData.chunk_count / 2)) : 5,
+                quizzesCount: 0,
+                flashcardsCount: 0,
+                pageCount: uploadData.chunk_count ? Math.max(1, Math.ceil(uploadData.chunk_count / 3)) : 10,
+                lastStudied: "never studied",
+              }
             : d
         )
       );
 
-      setTimeout(() => {
-        // Step 3
-        setDocuments((prev) =>
-          prev.map((d) =>
-            d.id === newDocId
-              ? { ...d, processingProgress: 80, processingStep: "Generating practice items..." }
-              : d
-          )
-        );
+      toast("Processing complete!", {
+        type: "success",
+        description: `"${file.name}" is now ready for practice.`,
+      });
 
-        setTimeout(() => {
-          // Completed
-          setDocuments((prev) =>
-            prev.map((d) =>
-              d.id === newDocId
-                ? {
-                    ...d,
-                    status: "ready",
-                    topicsCount: 5,
-                    quizzesCount: 1,
-                    flashcardsCount: 15,
-                    pageCount: 10,
-                    lastStudied: "never studied",
-                  }
-                : d
-            )
-          );
-
-          toast("Concept processing complete!", {
-            type: "success",
-            description: `"${file.name}" is now ready for practice.`,
-          });
-        }, 1200);
-      }, 1200);
-    }, 1000);
+    } catch (err: any) {
+      toast("Failed to process document", {
+        type: "error",
+        description: err.message,
+      });
+      // Remove temp doc on error
+      setDocuments((prev: DocumentItem[]) => prev.filter((d: DocumentItem) => d.id !== tempDocId));
+    }
   };
 
-  const handleDeleteDocument = (id: string) => {
-    const docToDelete = documents.find((d) => d.id === id);
+  const handleDeleteDocument = async (id: string) => {
+    const docToDelete = documents.find((d: DocumentItem) => d.id === id);
     if (!docToDelete) return;
-    setDocuments((prev) => prev.filter((d) => d.id !== id));
-    toast(`Deleted ${docToDelete.name}`, {
-      type: "info",
-      description: "Material deleted from study database.",
-    });
+
+    try {
+      const res = await fetch(`${API_BASE}/documents/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) throw new Error("Failed to delete document");
+
+      setDocuments((prev: DocumentItem[]) => prev.filter((d: DocumentItem) => d.id !== id));
+      toast(`Deleted ${docToDelete.name}`, {
+        type: "info",
+        description: "Material deleted from study database.",
+      });
+    } catch (err: any) {
+      toast("Error deleting document", {
+        type: "error",
+        description: err.message,
+      });
+    }
   };
 
   const handleGenerateQuiz = (id: string) => {
-    const doc = documents.find((d) => d.id === id);
-    toast(`Quiz initialized for ${doc?.name}`, {
-      type: "success",
-      description: "Taking you to practice sheets.",
-    });
+    router.push(`/quizzes/create?materialId=${id}`);
   };
 
   const handleOpenDetails = (id: string) => {
-    const doc = documents.find((d) => d.id === id);
-    toast(`Opening study material: ${doc?.name}`, { type: "info" });
+    router.push(`/documents/${id}`);
   };
 
   // Filtered logic
-  const filteredDocuments = documents.filter((doc) => {
+  const filteredDocuments = documents.filter((doc: DocumentItem) => {
     // Search query check
     const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase());
     

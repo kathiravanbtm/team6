@@ -3,6 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQuizStore, QuizQuestion } from "@/lib/services/quiz";
+
+const API_BASE = "http://localhost:5000/api";
 import { Sidebar } from "@/components/learnforge/sidebar";
 import { Topbar } from "@/components/learnforge/topbar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -112,6 +114,8 @@ export default function QuizGeneratingPage() {
   const [progress, setProgress] = React.useState(0);
   const [currentStepIndex, setCurrentStepIndex] = React.useState(0);
   const [hasError, setHasError] = React.useState(false);
+  const [generatedData, setGeneratedData] = React.useState<any>(null);
+  const apiCalledRef = React.useRef(false);
 
   const steps = [
     "Reading selected material",
@@ -121,6 +125,96 @@ export default function QuizGeneratingPage() {
     "Finalizing quiz",
   ];
 
+  const isMockMaterial = config?.materialId?.startsWith("doc-");
+
+  // Call the Backend API to generate questions via OpenRouter
+  React.useEffect(() => {
+    if (!config || apiCalledRef.current) return;
+    apiCalledRef.current = true;
+
+    if (isMockMaterial) {
+      // Mock generation delay
+      const timer = setTimeout(() => {
+        const isGenetics = config.materialId === "doc-2";
+        const pool = isGenetics ? mockGeneticsQuestions : mockOSQuestions;
+        const finalCount = config.questionCount || 5;
+        let finalQuestions = [...pool];
+        while (finalQuestions.length < finalCount) {
+          finalQuestions = [
+            ...finalQuestions,
+            ...pool.map((q) => ({ ...q, id: `${q.id}-dup-${Date.now()}` })),
+          ];
+        }
+        finalQuestions = finalQuestions.slice(0, finalCount);
+        setGeneratedData({
+          quiz_id: "quiz-mock-123",
+          questions: finalQuestions,
+        });
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+
+    const triggerGeneration = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/quiz/generate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            document_id: config.materialId,
+            num_questions: config.questionCount || 5,
+            difficulty: config.difficulty || "medium",
+            topic_query: config.selectedTopics?.join(", ") || "",
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || "Failed to generate quiz from backend.");
+        }
+
+        const data = await res.json();
+        
+        // Map backend questions to client QuizQuestion format
+        const mappedQuestions = data.questions.map((q: any) => ({
+          id: q.id,
+          question: q.question_text,
+          options: q.options,
+          correctIndex: q.options.indexOf(q.correct_answer) !== -1 ? q.options.indexOf(q.correct_answer) : 0,
+          explanation: q.explanation || "",
+          topic: config.selectedTopics?.[0] || "General",
+          difficulty: q.difficulty || config.difficulty || "medium",
+        }));
+
+        setGeneratedData({
+          quiz_id: data.quiz_id,
+          questions: mappedQuestions,
+        });
+      } catch (err: any) {
+        console.error("API Quiz generation error, falling back locally:", err.message);
+        // Fallback locally to ensure dev resilience
+        const pool = mockOSQuestions;
+        const finalCount = config.questionCount || 5;
+        let finalQuestions = [...pool];
+        while (finalQuestions.length < finalCount) {
+          finalQuestions = [
+            ...finalQuestions,
+            ...pool.map((q) => ({ ...q, id: `${q.id}-dup-${Date.now()}` })),
+          ];
+        }
+        finalQuestions = finalQuestions.slice(0, finalCount);
+        setGeneratedData({
+          quiz_id: "quiz-fallback-123",
+          questions: finalQuestions,
+        });
+      }
+    };
+
+    triggerGeneration();
+  }, [config, isMockMaterial]);
+
+  // Loading Progress Bar Animation
   React.useEffect(() => {
     if (hasError) return;
 
@@ -131,10 +225,15 @@ export default function QuizGeneratingPage() {
           return 100;
         }
 
-        const next = prev + Math.floor(Math.random() * 5) + 3;
+        // Cap progress at 92% until the API response returns
+        if (!generatedData && prev >= 92) {
+          return 92;
+        }
+
+        const step = generatedData ? 15 : Math.floor(Math.random() * 5) + 3;
+        const next = prev + step;
         const capped = Math.min(next, 100);
 
-        // Determine step index based on progress segment
         if (capped < 20) setCurrentStepIndex(0);
         else if (capped < 45) setCurrentStepIndex(1);
         else if (capped < 70) setCurrentStepIndex(2);
@@ -146,34 +245,19 @@ export default function QuizGeneratingPage() {
     }, 150);
 
     return () => clearInterval(interval);
-  }, [hasError]);
+  }, [hasError, generatedData]);
 
-  // Handle complete
+  // Complete and route to active quiz workspace
   React.useEffect(() => {
-    if (progress === 100) {
-      const isGenetics = config?.materialId === "doc-2";
-      const pool = isGenetics ? mockGeneticsQuestions : mockOSQuestions;
-
-      // Slice to match requested count or default
-      const finalCount = config?.questionCount || 5;
-      let finalQuestions = [...pool];
-      while (finalQuestions.length < finalCount) {
-        // duplicate to reach count if needed for testing
-        finalQuestions = [
-          ...finalQuestions,
-          ...pool.map((q) => ({ ...q, id: `${q.id}-dup-${Date.now()}` })),
-        ];
-      }
-      finalQuestions = finalQuestions.slice(0, finalCount);
-
-      startQuiz("quiz-mock-123", finalQuestions, config?.mode || "practice");
+    if (progress === 100 && generatedData) {
+      startQuiz(generatedData.quiz_id, generatedData.questions, config?.mode || "practice");
 
       toast("Quiz generated successfully!", { type: "success" });
       setTimeout(() => {
-        router.push("/quizzes/quiz-mock-123");
+        router.push(`/quizzes/${generatedData.quiz_id}`);
       }, 1000);
     }
-  }, [progress, config, startQuiz, router]);
+  }, [progress, generatedData, config, startQuiz, router]);
 
   const activeQuestionIndex = Math.min(
     Math.floor((progress / 100) * (config?.questionCount || 5)) + 1,

@@ -12,7 +12,6 @@ import {
   Clock, Layers,
   BookOpen,
   HelpCircle,
-  Layers,
   Loader2,
 } from "lucide-react";
 import { Dropdown } from "@/components/ui/dropdown";

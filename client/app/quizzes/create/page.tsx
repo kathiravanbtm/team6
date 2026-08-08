@@ -4,6 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuizStore, QuizConfig } from "@/lib/services/quiz";
+
+const API_BASE = "http://localhost:5000/api";
 import { Sidebar } from "@/components/learnforge/sidebar";
 import { Topbar } from "@/components/learnforge/topbar";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -80,6 +82,8 @@ export default function CreateQuizPage() {
   const router = useRouter();
   const setConfig = useQuizStore((state: any) => state.setConfig);
 
+  const [materials, setMaterials] = React.useState<any[]>(mockMaterials);
+
   // Guided Form state
   const [selectedMaterialId, setSelectedMaterialId] = React.useState("doc-1");
   const [selectedTopics, setSelectedTopics] = React.useState<string[]>([]);
@@ -90,12 +94,62 @@ export default function CreateQuizPage() {
   const [difficulty, setDifficulty] = React.useState<"easy" | "medium" | "hard" | "adaptive">("medium");
   const [goal, setGoal] = React.useState("Test my understanding");
 
-  // Sync default topics on material changes
-  const activeTopics = mockMaterialTopics[selectedMaterialId] || [];
+  // Fetch real study materials from backend
   React.useEffect(() => {
-    // Select all by default
+    const fetchDocs = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/documents`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.length > 0) {
+            const dbDocs = data.map((d: any) => ({
+              id: d.id,
+              name: d.name || d.title,
+              type: d.type || "pdf",
+              pages: d.pageCount || 10,
+              topics: d.topicsCount || 3,
+              concepts: d.topicsCount ? d.topicsCount * 4 : 12,
+            }));
+            
+            // Merge mock materials with DB ones, prioritizing DB ones
+            setMaterials(dbDocs);
+            
+            // Auto select first material or query param materialId
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlMatId = urlParams.get("materialId");
+            if (urlMatId && dbDocs.some((d: any) => d.id === urlMatId)) {
+              setSelectedMaterialId(urlMatId);
+            } else {
+              setSelectedMaterialId(dbDocs[0].id);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load documents", err);
+      }
+    };
+    fetchDocs();
+  }, []);
+
+  // Compute active topics list dynamically
+  const activeTopics = React.useMemo(() => {
+    const mat = materials.find((m) => m.id === selectedMaterialId);
+    const name = mat?.name || mat?.title || "Study Material";
+    if (mockMaterialTopics[selectedMaterialId]) {
+      return mockMaterialTopics[selectedMaterialId];
+    }
+    // Generic fallback topics for custom uploaded materials
+    return [
+      { name: `${name.replace(/\.[^/.]+$/, "")} - Foundations`, conceptCount: 4, mastery: 70 },
+      { name: `${name.replace(/\.[^/.]+$/, "")} - Key Themes`, conceptCount: 6, mastery: 65 },
+      { name: `${name.replace(/\.[^/.]+$/, "")} - Advanced Topics`, conceptCount: 3, mastery: 60 },
+    ];
+  }, [selectedMaterialId, materials]);
+
+  // Sync default topics on material changes
+  React.useEffect(() => {
     setSelectedTopics(activeTopics.map((t) => t.name));
-  }, [selectedMaterialId]);
+  }, [activeTopics]);
 
   // Actions
   const handleToggleTopic = (topicName: string) => {
@@ -146,7 +200,7 @@ export default function CreateQuizPage() {
     }
 
     const count = isCustomCount ? parseInt(customCountValue, 10) || 10 : questionCount;
-    const material = mockMaterials.find((m) => m.id === selectedMaterialId);
+    const material = materials.find((m) => m.id === selectedMaterialId);
 
     const config: QuizConfig = {
       materialId: selectedMaterialId,
@@ -163,7 +217,7 @@ export default function CreateQuizPage() {
     router.push("/quizzes/generating");
   };
 
-  const material = mockMaterials.find((m) => m.id === selectedMaterialId);
+  const material = materials.find((m) => m.id === selectedMaterialId);
   const activeCount = isCustomCount ? parseInt(customCountValue, 10) || 10 : questionCount;
   const estimatedTime = Math.round(activeCount * 0.75); // 45 seconds per question
 
@@ -194,7 +248,7 @@ export default function CreateQuizPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {mockMaterials.map((item) => {
+                {materials.map((item) => {
                   const isSelected = selectedMaterialId === item.id;
                   return (
                     <Card
