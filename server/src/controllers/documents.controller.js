@@ -14,12 +14,13 @@ async function uploadDocument(req, res, next) {
     const { url, text, title: userTitle } = req.body;
 
     if (!file && !url && !text) {
-      return res.status(400).json({ error: 'Please provide a PDF file, a web page URL, or text content.' });
+      return res.status(400).json({ error: 'Please provide a PDF, TXT, MD, or DOCX file, a web page URL, or text content.' });
     }
 
     // Step 1: Parse content
     const parseResult = await parseDocument({
       buffer: file?.buffer,
+      filename: file?.originalname,
       url,
       text,
     });
@@ -46,7 +47,6 @@ async function uploadDocument(req, res, next) {
       embeddings = await generateEmbeddings(chunkTexts);
     } catch (embedErr) {
       console.warn('[EMBEDDING WARN] Failed to generate embeddings via OpenRouter, continuing without vectors:', embedErr.message);
-      // Fallback: null embeddings if API key invalid or rate limited during dev setup
       embeddings = new Array(chunks.length).fill(null);
     }
     const embedTimeMs = Date.now() - embedStart;
@@ -110,6 +110,80 @@ async function uploadDocument(req, res, next) {
   }
 }
 
+/**
+ * GET /api/documents
+ * List all documents uploaded by the user with quiz counts.
+ */
+async function getDocuments(req, res, next) {
+  try {
+    const userId = req.user?.id;
+    
+    // Fetch documents
+    const { data: docs, error: docErr } = await supabaseAdmin
+      .from('documents')
+      .select('id, user_id, title, source_type, created_at')
+      .order('created_at', { ascending: false });
+
+    if (docErr) {
+      throw new Error(`Failed to fetch documents: ${docErr.message}`);
+    }
+
+    // For each document, count quizzes and chunks
+    const docsWithCounts = await Promise.all((docs || []).map(async (doc) => {
+      // Get count of quizzes
+      const { count: quizCount } = await supabaseAdmin
+        .from('quizzes')
+        .select('*', { count: 'exact', head: true })
+        .eq('document_id', doc.id);
+
+      // Get count of chunks to estimate topics (e.g. 1 topic per 2 chunks, min 1)
+      const { count: chunkCount } = await supabaseAdmin
+        .from('document_chunks')
+        .select('*', { count: 'exact', head: true })
+        .eq('document_id', doc.id);
+
+      return {
+        id: doc.id,
+        name: doc.title,
+        type: doc.source_type,
+        uploadedAt: doc.created_at,
+        status: 'ready',
+        topicsCount: Math.max(1, Math.ceil((chunkCount || 0) / 2)),
+        quizzesCount: quizCount || 0,
+      };
+    }));
+
+    return res.json(docsWithCounts);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * DELETE /api/documents/:id
+ * Deletes a document and all related cascaded chunks/quizzes.
+ */
+async function deleteDocument(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabaseAdmin
+      .from('documents')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Failed to delete document: ${error.message}`);
+    }
+
+    return res.json({ message: 'Document deleted successfully', id });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   uploadDocument,
+  getDocuments,
+  deleteDocument,
 };

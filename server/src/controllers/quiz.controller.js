@@ -120,7 +120,7 @@ async function getQuizById(req, res, next) {
 
     const { data: questions, error: qErr } = await supabaseAdmin
       .from('questions')
-      .select('id, quiz_id, question_text, options, explanation, source_chunk_id, difficulty')
+      .select('id, quiz_id, question_text, options, correct_answer, explanation, source_chunk_id, difficulty')
       .eq('quiz_id', id);
 
     if (qErr) {
@@ -215,8 +215,68 @@ async function submitQuiz(req, res, next) {
   }
 }
 
+/**
+ * GET /api/quiz
+ * Lists all quizzes with details like best score and question count.
+ */
+async function getQuizzes(req, res, next) {
+  try {
+    const { data: quizzes, error: qErr } = await supabaseAdmin
+      .from('quizzes')
+      .select('id, document_id, title, created_at')
+      .order('created_at', { ascending: false });
+
+    if (qErr) {
+      throw new Error(`Failed to fetch quizzes: ${qErr.message}`);
+    }
+
+    const quizzesWithDetails = await Promise.all((quizzes || []).map(async (q) => {
+      const { count: qCount } = await supabaseAdmin
+        .from('questions')
+        .select('*', { count: 'exact', head: true })
+        .eq('quiz_id', q.id);
+
+      const { data: attempts } = await supabaseAdmin
+        .from('attempts')
+        .select('score')
+        .eq('quiz_id', q.id)
+        .order('score', { ascending: false });
+
+      const bestScore = attempts && attempts.length > 0 ? attempts[0].score : null;
+
+      let documentTitle = 'Study Material';
+      if (q.document_id) {
+        const { data: doc } = await supabaseAdmin
+          .from('documents')
+          .select('title')
+          .eq('id', q.document_id)
+          .single();
+        if (doc) {
+          documentTitle = doc.title;
+        }
+      }
+
+      return {
+        id: q.id,
+        title: q.title,
+        sourceDocument: documentTitle,
+        questionsCount: qCount || 0,
+        difficulty: 'medium',
+        progress: attempts && attempts.length > 0 ? 100 : 0,
+        bestScore: bestScore,
+      };
+    }));
+
+    return res.json(quizzesWithDetails);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   generateQuizController,
   getQuizById,
   submitQuiz,
+  getQuizzes,
 };
+

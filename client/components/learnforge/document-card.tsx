@@ -9,7 +9,7 @@ import {
   BrainCircuit,
   Eye,
   Trash2,
-  Clock,
+  Clock, Layers,
   BookOpen,
   HelpCircle,
   Layers,
@@ -39,6 +39,7 @@ interface DocumentCardProps {
   onGenerateQuiz?: (id: string) => void;
   onOpenDetails?: (id: string) => void;
   onDelete?: (id: string) => void;
+  onStudyFlashcards?: (id: string) => void;
 }
 
 export function DocumentCard({
@@ -46,6 +47,7 @@ export function DocumentCard({
   onGenerateQuiz,
   onOpenDetails,
   onDelete,
+  onStudyFlashcards,
 }: DocumentCardProps) {
   const isReady = doc.status === "ready";
   const isProcessing = doc.status === "processing";
@@ -72,6 +74,12 @@ export function DocumentCard({
             label: "Generate Quiz",
             icon: <BrainCircuit className="h-4 w-4 text-primary" />,
             onClick: () => onGenerateQuiz?.(doc.id),
+          },
+          {
+            id: "flashcards",
+            label: "Study Flashcards",
+            icon: <Layers className="h-4 w-4 text-indigo-500" />,
+            onClick: () => onStudyFlashcards?.(doc.id),
           },
         ]
       : []),

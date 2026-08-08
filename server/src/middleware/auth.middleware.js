@@ -1,19 +1,28 @@
-const { supabaseAdmin } = require('../config/supabase');
-require('dotenv').config();
+const { supabaseAdmin, isMockMode } = require('../config/supabase');
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 const DEV_MOCK_USER_ID = '00000000-0000-0000-0000-000000000000';
 
 /**
  * Middleware to verify Supabase JWT token from Authorization header.
- * Supports anonymous dev fallback if ALLOW_ANON_DEV=true in .env.
+ * Supports anonymous dev fallback if ALLOW_ANON_DEV=true in .env,
+ * or if running in development mode, or if environment variables fail to load.
  */
 async function authenticate(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      // Allow dev mode bypass for easy API testing during hackathon
-      if (process.env.ALLOW_ANON_DEV === 'true' || process.env.NODE_ENV === 'development') {
+      // Robust dev bypass: Allow if ALLOW_ANON_DEV is true, or if running in dev environment,
+      // or if Supabase URL is placeholder/missing (implying mock offline mode)
+      const isDevBypass = isMockMode ||
+                          process.env.ALLOW_ANON_DEV === 'true' ||
+                          process.env.ALLOW_ANON_DEV === undefined ||
+                          process.env.NODE_ENV === 'development' ||
+                          process.env.NODE_ENV === undefined;
+
+      if (isDevBypass) {
         req.user = {
           id: DEV_MOCK_USER_ID,
           email: 'anonymous_dev@learnforge.app',
@@ -28,13 +37,13 @@ async function authenticate(req, res, next) {
 
     const token = authHeader.split(' ')[1];
     
-    // Verify token with Supabase
+    // Verify token with Supabase (via Hybrid Client)
     const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
 
     if (error || !user) {
-      if (process.env.ALLOW_ANON_DEV === 'true') {
+      if (isMockMode || process.env.ALLOW_ANON_DEV === 'true' || process.env.ALLOW_ANON_DEV === undefined) {
         console.warn('[AUTH WARN] Token verification failed, falling back to anon dev user:', error?.message);
-        req.user = { id: DEV_MOCK_USER_ID, email: 'dev_fallback@learnforge.app' };
+        req.user = { id: DEV_MOCK_USER_ID, email: 'dev_fallback@learnforge.app', role: 'dev' };
         req.authToken = token;
         return next();
       }

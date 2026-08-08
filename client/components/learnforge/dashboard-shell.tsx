@@ -39,120 +39,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-// Mock Data
-const initialDocuments: DocumentItem[] = [
-  {
-    id: "doc-1",
-    name: "Lecture 3 - Mitochondrial Genetics.pdf",
-    type: "pdf",
-    size: "2.4 MB",
-    uploadedAt: "2 hours ago",
-    status: "ready",
-    topicsCount: 4,
-    quizzesCount: 1,
-  },
-  {
-    id: "doc-2",
-    name: "Krebs Cycle pathways and intermediates.docx",
-    type: "docx",
-    size: "1.1 MB",
-    uploadedAt: "Yesterday",
-    status: "ready",
-    topicsCount: 3,
-    quizzesCount: 1,
-  },
-  {
-    id: "doc-3",
-    name: "Action Potential summary notes.md",
-    type: "md",
-    size: "18 KB",
-    uploadedAt: "3 days ago",
-    status: "ready",
-    topicsCount: 5,
-    quizzesCount: 1,
-  },
-];
-
-const initialQuizzes: QuizItem[] = [
-  {
-    id: "quiz-1",
-    title: "Mitochondrial Genetics Quiz",
-    sourceDocument: "Lecture 3 - Mitochondrial Genetics.pdf",
-    questionsCount: 3,
-    difficulty: "medium",
-    progress: 0,
-  },
-  {
-    id: "quiz-2",
-    title: "Krebs Cycle Diagnostics",
-    sourceDocument: "Krebs Cycle pathways and intermediates.docx",
-    questionsCount: 3,
-    difficulty: "hard",
-    progress: 100,
-    bestScore: 80,
-  },
-];
-
-const mockFlashcards: FlashcardItem[] = [
-  {
-    id: "fc-1",
-    front: "What is maternal inheritance in mitochondrial genetics?",
-    back: "Mitochondria are inherited exclusively from the mother because the sperm's mitochondria are generally destroyed after fertilization, and the oocyte contains several hundred thousand copies of mitochondrial DNA.",
-    topic: "Genetics",
-  },
-  {
-    id: "fc-2",
-    front: "What is heteroplasmy?",
-    back: "Heteroplasmy refers to the presence of more than one type of organellar genome (mitochondrial DNA) within a single cell or individual. It is a critical factor in the severity of mitochondrial diseases.",
-    topic: "Genetics",
-  },
-  {
-    id: "fc-3",
-    front: "What is the function of Cytochrome c in cellular pathways?",
-    back: "Cytochrome c is a small protein localized in the inner mitochondrial membrane. It transfers electrons between Complexes III and IV in the electron transport chain, and can also trigger apoptosis if released into the cytosol.",
-    topic: "Biochemistry",
-  },
-];
-
-const mockQuizQuestions: QuestionItem[] = [
-  {
-    id: "q-1",
-    question: "Why does mitochondrial DNA exhibit a significantly higher mutation rate than nuclear DNA?",
-    options: [
-      "Mitochondrial DNA contains more introns that attract mutagens",
-      "Lack of protective histone proteins and proximity to reactive oxygen species (ROS)",
-      "Mitochondrial DNA polymerase has no proofreading capabilities",
-      "Mitochondria actively absorb mutagens from the cytoplasm",
-    ],
-    correctIndex: 1,
-    explanation: "Correct! Mitochondrial DNA (mtDNA) is not bound by protective histones and is physically located in the inner membrane, directly adjacent to the respiratory chain where high levels of damaging reactive oxygen species (ROS) are generated during oxidative phosphorylation.",
-  },
-  {
-    id: "q-2",
-    question: "A patient displays muscle weakness, lactic acidosis, and red ragged fibers on muscle biopsy. Which inheritance pattern is most likely?",
-    options: [
-      "Autosomal Dominant",
-      "Autosomal Recessive",
-      "X-linked Recessive",
-      "Mitochondrial (Maternal)",
-    ],
-    correctIndex: 3,
-    explanation: "Correct! The combination of muscle weakness, lactic acidosis, and ragged red fibers is classic for mitochondrial encephalomyopathies (like MELAS or MERRF), which are caused by mutations in mitochondrial tRNA genes and follow maternal inheritance.",
-  },
-  {
-    id: "q-3",
-    question: "Which of the following complexes in the electron transport chain does NOT pump protons into the intermembrane space?",
-    options: [
-      "Complex I (NADH dehydrogenase)",
-      "Complex II (Succinate dehydrogenase)",
-      "Complex III (Cytochrome c reductase)",
-      "Complex IV (Cytochrome c oxidase)",
-    ],
-    correctIndex: 1,
-    explanation: "Correct! Complex II (Succinate dehydrogenase) transfers electrons from FADH2 to coenzyme Q, but it does not pump protons across the inner mitochondrial membrane. Complexes I, III, and IV pump protons, establishing the electrochemical gradient.",
-  },
-];
-
+// Keep visual fallback analytics data
 const analyticsData = [
   { date: "Mon", studyTime: 45, accuracy: 70 },
   { date: "Tue", studyTime: 60, accuracy: 75 },
@@ -162,6 +49,8 @@ const analyticsData = [
   { date: "Sat", studyTime: 120, accuracy: 82 },
   { date: "Sun", studyTime: 75, accuracy: 88 },
 ];
+
+const API_BASE = "http://localhost:5000/api";
 
 interface DashboardShellProps {
   initialTab?: string;
@@ -176,30 +65,72 @@ export function DashboardShell({ initialTab = "quizzes", title = "AI Learning La
     setActiveTab(initialTab);
   }, [initialTab]);
 
-  // Dynamic States
-  const [documents, setDocuments] = React.useState<DocumentItem[]>(initialDocuments);
-  const [quizzes, setQuizzes] = React.useState<QuizItem[]>(initialQuizzes);
+  // Dynamic States from Backend
+  const [documents, setDocuments] = React.useState<DocumentItem[]>([]);
+  const [quizzes, setQuizzes] = React.useState<QuizItem[]>([]);
+  const [flashcards, setFlashcards] = React.useState<FlashcardItem[]>([]);
+  const [selectedDocId, setSelectedDocId] = React.useState<string | null>(null);
 
   // Uploading Flow
   const [isUploading, setIsUploading] = React.useState(false);
   const [uploadSteps, setUploadSteps] = React.useState<ProcessingStep[]>([]);
 
-  // Flashcards state
+  // Flashcards Index
   const [currentFcIndex, setCurrentFcIndex] = React.useState(0);
 
   // Practice session state
   const [practiceActive, setPracticeActive] = React.useState(false);
+  const [activeQuizQuestions, setActiveQuizQuestions] = React.useState<QuestionItem[]>([]);
+  const [activeQuizId, setActiveQuizId] = React.useState<string | null>(null);
+  const [activeQuizTitle, setActiveQuizTitle] = React.useState<string>("Practice Quiz");
   const [currentQIndex, setCurrentQIndex] = React.useState(0);
   const [selectedOption, setSelectedOption] = React.useState<number | null>(null);
   const [isSubmitted, setIsSubmitted] = React.useState(false);
   const [correctAnswersCount, setCorrectAnswersCount] = React.useState(0);
+  const [selectedAnswers, setSelectedAnswers] = React.useState<string[]>([]);
 
   const tabs: TabOption[] = [
     { id: "quizzes", label: "AI Quizzes", icon: <HelpCircle className="h-4 w-4" /> },
   ];
 
-  // Document Upload Mock Flow
-  const handleUpload = (files: File[]) => {
+  // Fetch Documents List
+  const fetchDocuments = React.useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/documents`);
+      if (!res.ok) throw new Error("Failed to fetch documents");
+      const data = await res.json();
+      setDocuments(data);
+    } catch (err: any) {
+      console.error("Error fetching documents:", err.message);
+    }
+  }, []);
+
+  // Fetch Quizzes List
+  const fetchQuizzes = React.useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/quiz`);
+      if (!res.ok) throw new Error("Failed to fetch quizzes");
+      const data = await res.json();
+      setQuizzes(data);
+    } catch (err: any) {
+      console.error("Error fetching quizzes:", err.message);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchDocuments();
+    fetchQuizzes();
+  }, [fetchDocuments, fetchQuizzes]);
+
+  // If flashcard tab active and no cards are loaded, load cards for the first document
+  React.useEffect(() => {
+    if (activeTab === "flashcards" && flashcards.length === 0 && documents.length > 0) {
+      handleStudyFlashcards(documents[0].id);
+    }
+  }, [activeTab, flashcards.length, documents]);
+
+  // Document Upload Flow calling Backend API
+  const handleUpload = async (files: File[]) => {
     if (files.length === 0) return;
     const file = files[0];
 
@@ -210,8 +141,24 @@ export function DashboardShell({ initialTab = "quizzes", title = "AI Learning La
       { id: "step-3", label: "Generating practice questions & answers", status: "idle" },
     ]);
 
-    // Step 1: Uploading complete
-    setTimeout(() => {
+    try {
+      // Step 1: Upload and Parse document on server
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const uploadRes = await fetch(`${API_BASE}/documents/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json();
+        throw new Error(errorData.error || "Failed to upload document");
+      }
+
+      const uploadData = await uploadRes.json();
+      const docId = uploadData.document_id;
+
       setUploadSteps((prev) =>
         prev.map((s, idx) =>
           idx === 0
@@ -222,70 +169,152 @@ export function DashboardShell({ initialTab = "quizzes", title = "AI Learning La
         )
       );
 
-      // Step 2: Extracting concepts complete
-      setTimeout(() => {
-        setUploadSteps((prev) =>
-          prev.map((s, idx) =>
-            idx === 1
-              ? { ...s, status: "completed" }
-              : idx === 2
-              ? { ...s, status: "running" }
-              : s
-          )
-        );
+      // Step 2: Extracting concepts / Trigger quiz generation
+      const quizRes = await fetch(`${API_BASE}/quiz/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          document_id: docId,
+          num_questions: 5,
+          difficulty: "medium",
+        }),
+      });
 
-        // Step 3: Generating quiz complete
-        setTimeout(() => {
-          setIsUploading(false);
+      if (!quizRes.ok) {
+        const errorData = await quizRes.json();
+        throw new Error(errorData.error || "Failed to generate quiz");
+      }
 
-          const newDocId = `doc-${Date.now()}`;
-          const newDoc: DocumentItem = {
-            id: newDocId,
-            name: file.name,
-            type: (file.name.split(".").pop() as any) || "pdf",
-            size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-            uploadedAt: "Just now",
-            status: "ready",
-            topicsCount: 4,
-            quizzesCount: 1,
-          };
+      setUploadSteps((prev) =>
+        prev.map((s, idx) =>
+          idx === 1
+            ? { ...s, status: "completed" }
+            : idx === 2
+            ? { ...s, status: "running" }
+            : s
+        )
+      );
 
-          const newQuiz: QuizItem = {
-            id: `quiz-${Date.now()}`,
-            title: `${file.name.replace(/\.[^/.]+$/, "")} Quiz`,
-            sourceDocument: file.name,
-            questionsCount: 3,
-            difficulty: "medium",
-            progress: 0,
-          };
+      // Step 3: Trigger Flashcards generation in background
+      await fetch(`${API_BASE}/flashcards/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          document_id: docId,
+          count: 5,
+        }),
+      });
 
-          setDocuments((prev) => [newDoc, ...prev]);
-          setQuizzes((prev) => [newQuiz, ...prev]);
+      setUploadSteps((prev) =>
+        prev.map((s, idx) =>
+          idx === 2
+            ? { ...s, status: "completed" }
+            : s
+        )
+      );
 
-          toast(`Successfully processed "${file.name}"`, {
-            type: "success",
-            description: "Your AI Quiz and Flashcards are ready!",
-          });
-        }, 1200);
-      }, 1200);
-    }, 1000);
+      // Wait briefly for smooth transition
+      await new Promise((r) => setTimeout(r, 600));
+
+      setIsUploading(false);
+      fetchDocuments();
+      fetchQuizzes();
+
+      toast(`Successfully processed "${file.name}"`, {
+        type: "success",
+        description: "Your AI Quiz and Flashcards are ready!",
+      });
+
+    } catch (err: any) {
+      console.error(err);
+      setIsUploading(false);
+      toast(err.message || "Failed to upload and process document", {
+        type: "error",
+      });
+    }
   };
 
-  const handleDeleteDoc = (id: string) => {
-    const docToDelete = documents.find((d) => d.id === id);
-    if (!docToDelete) return;
-    setDocuments((prev) => prev.filter((d) => d.id !== id));
-    toast(`Deleted ${docToDelete.name}`, { type: "info" });
+  const handleDeleteDoc = async (id: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/documents/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Failed to delete document");
+
+      setDocuments((prev) => prev.filter((d) => d.id !== id));
+      fetchQuizzes();
+      toast("Deleted document successfully", { type: "info" });
+    } catch (err: any) {
+      console.error(err);
+      toast("Error deleting file: " + err.message, { type: "error" });
+    }
   };
 
-  // Start Quiz Practice
-  const handleStartQuiz = (id: string) => {
-    setPracticeActive(true);
-    setCurrentQIndex(0);
-    setSelectedOption(null);
-    setIsSubmitted(false);
-    setCorrectAnswersCount(0);
-    setActiveTab("quizzes");
+  // Generate quiz explicitly for a document
+  const handleGenerateQuiz = async (docId: string) => {
+    try {
+      toast("Generating AI Quiz...", { type: "info" });
+      const res = await fetch(`${API_BASE}/quiz/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          document_id: docId,
+          num_questions: 5,
+          difficulty: "medium",
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to generate quiz");
+      }
+
+      const data = await res.json();
+      toast("AI Quiz generated! Starting practice...", { type: "success" });
+      fetchQuizzes();
+      handleStartQuiz(data.quiz_id);
+    } catch (err: any) {
+      console.error(err);
+      toast("Error generating quiz: " + err.message, { type: "error" });
+    }
+  };
+
+  // Start Quiz Practice calling Backend
+  const handleStartQuiz = async (quizId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/quiz/${quizId}`);
+      if (!res.ok) throw new Error("Failed to fetch quiz details");
+      const data = await res.json();
+
+      const qList: QuestionItem[] = (data.questions || []).map((q: any) => ({
+        id: q.id,
+        question: q.question_text,
+        options: q.options,
+        correctIndex: q.options.indexOf(q.correct_answer),
+        explanation: q.explanation || "No explanation provided.",
+      }));
+
+      setActiveQuestions(qList);
+      setActiveQuizId(quizId);
+      setActiveQuizTitle(data.title || "Practice Quiz");
+      
+      setPracticeActive(true);
+      setCurrentQIndex(0);
+      setSelectedOption(null);
+      setIsSubmitted(false);
+      setCorrectAnswersCount(0);
+      setSelectedAnswers([]);
+      setActiveTab("quizzes");
+    } catch (err: any) {
+      console.error(err);
+      toast("Error loading quiz questions: " + err.message, { type: "error" });
+    }
   };
 
   const handleSelectOption = (idx: number) => {
@@ -293,9 +322,17 @@ export function DashboardShell({ initialTab = "quizzes", title = "AI Learning La
   };
 
   const handleQuestionSubmit = () => {
-    if (selectedOption === null) return;
+    if (selectedOption === null || activeQuestions.length === 0) return;
     setIsSubmitted(true);
-    if (selectedOption === mockQuizQuestions[currentQIndex].correctIndex) {
+
+    const selectedAnswerText = activeQuestions[currentQIndex].options[selectedOption];
+    setSelectedAnswers((prev) => {
+      const next = [...prev];
+      next[currentQIndex] = selectedAnswerText;
+      return next;
+    });
+
+    if (selectedOption === activeQuestions[currentQIndex].correctIndex) {
       setCorrectAnswersCount((prev) => prev + 1);
       toast("Correct!", { type: "success" });
     } else {
@@ -303,27 +340,80 @@ export function DashboardShell({ initialTab = "quizzes", title = "AI Learning La
     }
   };
 
-  const handleNextQuestion = () => {
-    if (currentQIndex < mockQuizQuestions.length - 1) {
+  const handleNextQuestion = async () => {
+    if (currentQIndex < activeQuestions.length - 1) {
       setCurrentQIndex((prev) => prev + 1);
       setSelectedOption(null);
       setIsSubmitted(false);
     } else {
       setPracticeActive(false);
-      const score = Math.round((correctAnswersCount / mockQuizQuestions.length) * 100);
+      const score = Math.round((correctAnswersCount / activeQuestions.length) * 100);
 
-      setQuizzes((prev) =>
-        prev.map((q) =>
-          q.id === "quiz-1"
-            ? { ...q, progress: 100, bestScore: Math.max(q.bestScore ?? 0, score) }
-            : q
-        )
-      );
+      // Submit attempt details to backend
+      if (activeQuizId) {
+        try {
+          const finalAnswers = activeQuestions.map((q, idx) => ({
+            question_id: q.id,
+            selected: idx === currentQIndex 
+              ? activeQuestions[currentQIndex].options[selectedOption!]
+              : selectedAnswers[idx],
+          }));
+
+          await fetch(`${API_BASE}/quiz/${activeQuizId}/submit`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ answers: finalAnswers }),
+          });
+
+          fetchQuizzes(); // Reload scores
+        } catch (err) {
+          console.error("Failed to record quiz attempt:", err);
+        }
+      }
 
       toast("Practice Session Completed!", {
         type: "success",
-        description: `You scored ${score}% (${correctAnswersCount}/${mockQuizQuestions.length} correct)`,
+        description: `You scored ${score}% (${correctAnswersCount}/${activeQuestions.length} correct)`,
       });
+    }
+  };
+
+  // Flashcards Study Flow calling Backend
+  const handleStudyFlashcards = async (docId: string) => {
+    try {
+      setSelectedDocId(docId);
+      const res = await fetch(`${API_BASE}/flashcards/${docId}`);
+      if (!res.ok) throw new Error("Failed to fetch flashcards");
+      const data = await res.json();
+
+      if (data.flashcards && data.flashcards.length > 0) {
+        setFlashcards(data.flashcards);
+        setCurrentFcIndex(0);
+        setActiveTab("flashcards");
+      } else {
+        // Trigger auto generation if empty
+        toast("No flashcards found for this document. Generating with AI...", { type: "info" });
+        const genRes = await fetch(`${API_BASE}/flashcards/generate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ document_id: docId, count: 5 }),
+        });
+
+        if (!genRes.ok) throw new Error("Failed to generate flashcards");
+        const genData = await genRes.json();
+        
+        setFlashcards(genData.flashcards);
+        setCurrentFcIndex(0);
+        setActiveTab("flashcards");
+        toast("AI Flashcards ready!", { type: "success" });
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast("Error loading flashcards: " + err.message, { type: "error" });
     }
   };
 
@@ -334,9 +424,19 @@ export function DashboardShell({ initialTab = "quizzes", title = "AI Learning La
       toast("No worries. Flashcard scheduled for short-term review.", { type: "info" });
     }
     setTimeout(() => {
-      setCurrentFcIndex((prev) => (prev + 1) % mockFlashcards.length);
+      if (flashcards.length > 0) {
+        setCurrentFcIndex((prev) => (prev + 1) % flashcards.length);
+      }
     }, 1000);
   };
+
+  // Calculate dynamic stats
+  const completedQuizzes = quizzes.filter(q => q.bestScore !== null && q.bestScore !== undefined);
+  const avgScore = completedQuizzes.length > 0 
+    ? Math.round(completedQuizzes.reduce((sum, q) => sum + (q.bestScore || 0), 0) / completedQuizzes.length)
+    : 82; // visual default fallback
+
+  const [activeQuestions, setActiveQuestions] = React.useState<QuestionItem[]>([]);
 
   return (
     <div className="flex min-h-screen bg-background text-text-primary selection:bg-primary/20 selection:text-primary">
@@ -361,7 +461,7 @@ export function DashboardShell({ initialTab = "quizzes", title = "AI Learning La
             />
             <StatCard
               title="Average Score"
-              value="82%"
+              value={`${avgScore}%`}
               icon={<TrendingUp className="h-5 w-5" />}
               trend={{ value: "+4.5%", type: "positive" }}
             />
@@ -398,6 +498,7 @@ export function DashboardShell({ initialTab = "quizzes", title = "AI Learning La
                   <ProcessingStatus steps={uploadSteps} />
                 </div>
               ) : (
+                // Use local upload dropzone
                 <UploadDropzone onUpload={handleUpload} />
               )}
 
@@ -423,7 +524,8 @@ export function DashboardShell({ initialTab = "quizzes", title = "AI Learning La
                         key={doc.id}
                         document={doc}
                         onDelete={handleDeleteDoc}
-                        onGenerateQuiz={() => handleStartQuiz("quiz-1")}
+                        onGenerateQuiz={handleGenerateQuiz}
+                        onStudyFlashcards={handleStudyFlashcards}
                       />
                     ))}
                   </div>
@@ -446,25 +548,32 @@ export function DashboardShell({ initialTab = "quizzes", title = "AI Learning La
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {quizzes.map((quiz) => (
-                      <QuizCard
-                        key={quiz.id}
-                        quiz={quiz}
-                        onStart={handleStartQuiz}
-                      />
-                    ))}
-                  </div>
+                  {quizzes.length === 0 ? (
+                    <EmptyState
+                      title="No quizzes generated yet"
+                      description="Go to Study Materials and click Generate Quiz to generate your first AI practice quiz."
+                    />
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                      {quizzes.map((quiz) => (
+                        <QuizCard
+                          key={quiz.id}
+                          quiz={quiz}
+                          onStart={handleStartQuiz}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-bold text-text-primary text-base">
-                        Mitochondrial Genetics Quiz
+                        {activeQuizTitle}
                       </h3>
                       <p className="text-xs text-text-secondary">
-                        Question {currentQIndex + 1} of {mockQuizQuestions.length}
+                        Question {currentQIndex + 1} of {activeQuestions.length}
                       </p>
                     </div>
                     <Button variant="outline" size="sm" onClick={() => setPracticeActive(false)}>
@@ -472,15 +581,17 @@ export function DashboardShell({ initialTab = "quizzes", title = "AI Learning La
                     </Button>
                   </div>
 
-                  <QuestionCard
-                    question={mockQuizQuestions[currentQIndex]}
-                    selectedOption={selectedOption}
-                    onSelectOption={handleSelectOption}
-                    isSubmitted={isSubmitted}
-                    onSubmit={handleQuestionSubmit}
-                    onNext={handleNextQuestion}
-                    isLastQuestion={currentQIndex === mockQuizQuestions.length - 1}
-                  />
+                  {activeQuestions.length > 0 && (
+                    <QuestionCard
+                      question={activeQuestions[currentQIndex]}
+                      selectedOption={selectedOption}
+                      onSelectOption={handleSelectOption}
+                      isSubmitted={isSubmitted}
+                      onSubmit={handleQuestionSubmit}
+                      onNext={handleNextQuestion}
+                      isLastQuestion={currentQIndex === activeQuestions.length - 1}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -498,34 +609,43 @@ export function DashboardShell({ initialTab = "quizzes", title = "AI Learning La
                 </p>
               </div>
 
-              <Flashcard
-                card={mockFlashcards[currentFcIndex]}
-                onScore={handleFlashcardScore}
-              />
+              {flashcards.length === 0 ? (
+                <EmptyState
+                  title="No flashcards loaded"
+                  description="Upload study materials to automatically generate flashcards, or select 'Study Flashcards' from your materials list."
+                />
+              ) : (
+                <>
+                  <Flashcard
+                    card={flashcards[currentFcIndex]}
+                    onScore={handleFlashcardScore}
+                  />
 
-              <div className="flex items-center justify-center gap-4 text-xs font-semibold text-text-secondary">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setCurrentFcIndex((prev) => (prev - 1 + mockFlashcards.length) % mockFlashcards.length)
-                  }
-                  className="h-8 py-0 px-3 cursor-pointer"
-                >
-                  Previous
-                </Button>
-                <span>
-                  {currentFcIndex + 1} of {mockFlashcards.length}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentFcIndex((prev) => (prev + 1) % mockFlashcards.length)}
-                  className="h-8 py-0 px-3 cursor-pointer"
-                >
-                  Next Card
-                </Button>
-              </div>
+                  <div className="flex items-center justify-center gap-4 text-xs font-semibold text-text-secondary">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setCurrentFcIndex((prev) => (prev - 1 + flashcards.length) % flashcards.length)
+                      }
+                      className="h-8 py-0 px-3 cursor-pointer"
+                    >
+                      Previous
+                    </Button>
+                    <span>
+                      {currentFcIndex + 1} of {flashcards.length}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentFcIndex((prev) => (prev + 1) % flashcards.length)}
+                      className="h-8 py-0 px-3 cursor-pointer"
+                    >
+                      Next Card
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
